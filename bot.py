@@ -49,18 +49,18 @@ async def award(
         # 3. Send data to your GoDaddy PHP Webhook
         response = requests.post(WEBHOOK_URL, json=payload, headers=headers, timeout=10)
         
-        # Attempt to parse JSON safely
-        try:
-            result = response.json()
-        except Exception:
-            await ctx.respond(f"🚨 Web server returned non-JSON (HTTP {response.status_code}):\n```text\n{response.text[:300]}\n```", ephemeral=True)
-            return
-        
-        if response.status_code == 200 and result.get("status") == "success":
-            await ctx.respond(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!")
+        if response.status_code == 200:
+            try:
+                result = response.json()
+                if result.get("status") == "success":
+                    await ctx.respond(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!")
+                else:
+                    error_msg = result.get("message", "Unknown error")
+                    await ctx.respond(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
+            except Exception:
+                await ctx.respond(f"🚨 Web server returned non-JSON (HTTP 200):\n```text\n{response.text[:300]}\n```", ephemeral=True)
         else:
-            error_msg = result.get("message", "Unknown error")
-            await ctx.respond(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
+            await ctx.respond(f"⚠️ Web server returned HTTP status {response.status_code}", ephemeral=True)
             
     except Exception as e:
         await ctx.respond(f"🚨 Connection error occurred: {str(e)}", ephemeral=True)
