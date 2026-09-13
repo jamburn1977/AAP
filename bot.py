@@ -8,10 +8,12 @@ intents = discord.Intents.default()
 intents.members = True  # Required to check member roles
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Configuration loaded securely from environment variables
+# Configuration
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://yourdomain.com/webhook.php")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
 ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
+# ...
+bot.run(os.getenv("DISCORD_BOT_TOKEN"))
 
 @bot.event
 async def on_ready():
@@ -45,10 +47,17 @@ async def award(
                 "Content-Type": "application/json"
         }
         
-        try:
+try:
                 # 3. Send data to your GoDaddy PHP Webhook
                 response = requests.post(WEBHOOK_URL, json=payload, headers=headers, timeout=10)
-                result = response.json()
+                
+                # Attempt to parse JSON safely
+                try:
+                        result = response.json()
+                except Exception:
+                        # If GoDaddy returns HTML or PHP warnings instead of clean JSON, show the text
+                        await ctx.respond(f"🚨 Web server returned non-JSON (HTTP {response.status_code}):\n```text\n{response.text[:300]}\n```", ephemeral=True)
+                        return
                 
                 if response.status_code == 200 and result.get("status") == "success":
                         await ctx.respond(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!")
@@ -57,7 +66,7 @@ async def award(
                         await ctx.respond(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
                         
         except Exception as e:
-                await ctx.respond(f"🚨 Connection error occurred while reaching your web server: {str(e)}", ephemeral=True)
+                await ctx.respond(f"🚨 Connection error occurred: {str(e)}", ephemeral=True)
 
-# Run the bot using the environment variable for your Discord Token (MUST BE AT THE VERY BOTTOM)
-bot.run(os.getenv("DISCORD_BOT_TOKEN"))
+# Run the bot using your Discord Bot Token
+bot.run("Token")
