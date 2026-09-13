@@ -62,4 +62,4 @@ async def award(
                 await ctx.respond(f"🚨 Connection error occurred while reaching your web server: {str(e)}", ephemeral=True)
 
 # Run the bot using your Discord Bot Token
-bot.run("MTU0ODc5MjMwMzAwMTI3NjU4Ng.GpszAz.OdjSxgAK08z-Bax_pn9Tkr2zPosAf9UOA0YC9g")
+bot.run("Token")
