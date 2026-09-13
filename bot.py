@@ -11,7 +11,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 # Configuration
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://yourdomain.com/webhook.php")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
-ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
+ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "1526311637848559819"))
 # ...
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))
 
