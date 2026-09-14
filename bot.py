@@ -3,24 +3,37 @@ import discord
 from discord.ext import commands
 import requests
 
+# Initialize Bot with appropriate intents
 intents = discord.Intents.default()
-intents.members = True
+intents.members = True  # Required to check member roles
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-WEBHOOK_URL = os.getenv("WEBHOOK_URL")
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
-ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "0"))
+# Configuration loaded securely from environment variables
+WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://yourdomain.com/webhook.php")
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
+ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
 
 @bot.event
 async def on_ready():
-        print(f"Logged in as {bot.user.name}")
+        print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
+        print("Bot is ready to dispatch awards to your web server.")
 
-@bot.slash_command(name="award", description="Give an award to a member")
-async def award(ctx: discord.ApplicationContext, member: discord.Member, award_name: str, reason: str = "No reason provided"):
+@bot.slash_command(name="award", description="Give an award to a member and sync it to the website database.")
+async def award(
+        ctx: discord.ApplicationContext, 
+        member: discord.Member, 
+        award_name: str, 
+        reason: str = "No reason provided"
+):
+        # 1. Verify if the issuer has the required role
         if not any(role.id == ALLOWED_ROLE_ID for role in ctx.author.roles):
-                await ctx.respond("❌ You do not have the required role.", ephemeral=True)
+                await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
                 return
         
+        # 2. Immediately tell Discord we are processing (prevents timeout)
+        await ctx.defer(ephemeral=False)
+        
+        # 3. Prepare payload data
         payload = {
                 "recipient_discord_id": str(member.id),
                 "recipient_username": member.display_name,
@@ -36,14 +49,23 @@ async def award(ctx: discord.ApplicationContext, member: discord.Member, award_n
         }
         
         try:
+                # 4. Send data to your GoDaddy PHP Webhook
                 response = requests.post(WEBHOOK_URL, json=payload, headers=headers, timeout=10)
-                result = response.json()
+                
+                try:
+                        result = response.json()
+                except Exception:
+                        await ctx.followup.send(f"🚨 Web server returned non-JSON (HTTP {response.status_code}):\n```text\n{response.text[:300]}\n```", ephemeral=True)
+                        return
+                
                 if response.status_code == 200 and result.get("status") == "success":
-                        await ctx.respond(f"🏆 Successfully awarded **{award_name}** to {member.mention}!")
+                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!")
                 else:
-                        msg = result.get("message", "Unknown error")
-                        await ctx.respond(f"⚠️ Failed: {msg}", ephemeral=True)
+                        error_msg = result.get("message", "Unknown error")
+                        await ctx.followup.send(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
+                        
         except Exception as e:
-                await ctx.respond(f"🚨 Error: {str(e)}", ephemeral=True)
+                await ctx.followup.send(f"🚨 Connection error occurred: {str(e)}", ephemeral=True)
 
+# Run the bot using the environment variable for your Discord Token
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))
