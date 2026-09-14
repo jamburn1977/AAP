@@ -30,8 +30,8 @@ async def award(
                 await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
                 return
         
-        # 2. Immediately tell Discord we are processing (prevents timeout)
-        await ctx.defer(ephemeral=False)
+        # 2. Immediately defer as ephemeral so all followups match safely
+        await ctx.defer(ephemeral=True)
         
         # 3. Prepare payload data
         payload = {
@@ -59,7 +59,7 @@ async def award(
                         return
                 
                 if response.status_code == 200 and result.get("status") == "success":
-                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!")
+                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!", ephemeral=True)
                 else:
                         error_msg = result.get("message", "Unknown error")
                         await ctx.followup.send(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
