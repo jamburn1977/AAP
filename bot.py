@@ -53,7 +53,7 @@ async def award(
                 await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
                 return
         
-        await ctx.defer(ephemeral=True)
+        await ctx.defer(ephemeral=False)
         
         payload = {
                 "recipient_discord_id": str(member.id),
