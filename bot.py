@@ -14,19 +14,23 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
 ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
 
 async def get_award_choices(ctx: discord.AutocompleteContext):
-        # Dynamically fetches the current list of awards from your PHP backend
+        # Dynamically fetches awards from your PHP backend with a strict 2-second timeout
         try:
                 response = requests.get(
                         f"{WEBHOOK_URL}?action=get_awards", 
                         headers={"Authorization": WEBHOOK_SECRET}, 
-                        timeout=5
+                        timeout=2
                 )
                 if response.status_code == 200:
                         data = response.json()
-                        return data.get("awards", ["MVP", "Veteran"])
+                        awards = data.get("awards", [])
+                        if awards:
+                                return awards
         except Exception:
                 pass
-        return ["MVP", "Veteran"]
+        
+        # Instant fallback so the dropdown always displays choices even if the web server lags
+        return ["MVP", "Veteran", "Top Recruiter"]
 
 @bot.event
 async def on_ready():
