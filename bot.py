@@ -1,41 +1,45 @@
 import os
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import requests
 
-# Initialize Bot with appropriate intents (Members intent required for role assignment)
 intents = discord.Intents.default()
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Configuration loaded securely from environment variables
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://yourdomain.com/webhook.php")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
 ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
 
-async def get_award_choices(ctx: discord.AutocompleteContext):
-        # Dynamically fetches awards from your PHP backend with a strict 2-second timeout
+# Global cache so autocomplete responds instantly without network lag
+CACHED_AWARDS = ["MVP", "Veteran", "Top Recruiter"]
+
+@tasks.loop(minutes=5)
+async def refresh_awards_cache():
+        global CACHED_AWARDS
         try:
                 response = requests.get(
                         f"{WEBHOOK_URL}?action=get_awards", 
                         headers={"Authorization": WEBHOOK_SECRET}, 
-                        timeout=2
+                        timeout=5
                 )
                 if response.status_code == 200:
                         data = response.json()
-                        awards = data.get("awards", [])
-                        if awards:
-                                return awards
+                        fetched = data.get("awards", [])
+                        if fetched:
+                                CACHED_AWARDS = fetched
         except Exception:
                 pass
-        
-        # Instant fallback so the dropdown always displays choices even if the web server lags
-        return ["MVP", "Veteran", "Top Recruiter"]
+
+async def get_award_choices(ctx: discord.AutocompleteContext):
+        # Returns instantly from memory—zero network delay, zero timeouts!
+        return [award for award in CACHED_AWARDS if ctx.value.lower() in award.lower()]
 
 @bot.event
 async def on_ready():
         print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
-        print("Bot is ready and synced with your web database.")
+        if not refresh_awards_cache.is_running():
+                refresh_awards_cache.start()
 
 @bot.slash_command(name="award", description="Give an award to a member, assign their role, and log it to the database.")
 @discord.option("award_name", description="Select an award from your database", autocomplete=get_award_choices)
@@ -45,15 +49,12 @@ async def award(
         award_name: str, 
         reason: str = "No reason provided"
 ):
-        # 1. Verify if the issuer has the required role
         if not any(role.id == ALLOWED_ROLE_ID for role in ctx.author.roles):
                 await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
                 return
         
-        # 2. Immediately defer as ephemeral to prevent Discord 3-second timeouts
         await ctx.defer(ephemeral=True)
         
-        # 3. Prepare payload data
         payload = {
                 "recipient_discord_id": str(member.id),
                 "recipient_username": member.display_name,
@@ -69,7 +70,6 @@ async def award(
         }
         
         try:
-                # 4. Send data to your GoDaddy PHP Webhook
                 response = requests.post(WEBHOOK_URL, json=payload, headers=headers, timeout=10)
                 
                 try:
@@ -82,7 +82,6 @@ async def award(
                         role_id_str = result.get("role_id")
                         role_assigned_text = ""
                         
-                        # 5. Automatically assign the Discord role if a valid role_id was returned
                         if role_id_str and role_id_str.isdigit():
                                 role_id = int(role_id_str)
                                 role = ctx.guild.get_role(role_id)
@@ -95,13 +94,14 @@ async def award(
                                 else:
                                         role_assigned_text = " (⚠️ Role ID found in DB, but role not found in this Discord server)"
                         
-                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention}{role_assigned_text} and saved it to the database!", ephemeral=True)
+                        # Public success message for everyone to see!
+                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention}{role_assigned_text} and saved it to the database!", ephemeral=False)
                 else:
                         error_msg = result.get("message", "Unknown error")
+                        # Errors stay private (ephemeral)
                         await ctx.followup.send(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
                         
         except Exception as e:
                 await ctx.followup.send(f"🚨 Connection error occurred: {str(e)}", ephemeral=True)
 
-# Run the bot using the environment variable for your Discord Token
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))
