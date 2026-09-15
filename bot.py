@@ -9,7 +9,10 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 
 WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://yourdomain.com/webhook.php")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
-ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
+
+# Parse multiple comma-separated allowed role IDs from environment variable
+allowed_role_env = os.getenv("ALLOWED_ROLE_IDS", "1526311637848559819")
+ALLOWED_ROLE_IDS = [int(role_id.strip()) for role_id in allowed_role_env.split(",") if role_id.strip().isdigit()]
 
 # Global cache so autocomplete responds instantly without network lag
 CACHED_AWARDS = ["MVP", "Veteran", "Top Recruiter"]
@@ -49,11 +52,12 @@ async def award(
         award_name: str, 
         reason: str = "No reason provided"
 ):
-        if not any(role.id == ALLOWED_ROLE_ID for role in ctx.author.roles):
+        # Check if the author has ANY of the allowed role IDs
+        if not any(role.id in ALLOWED_ROLE_IDS for role in ctx.author.roles):
                 await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
                 return
         
-        await ctx.defer(ephemeral=False)
+        await ctx.defer(ephemeral=True)
         
         payload = {
                 "recipient_discord_id": str(member.id),
