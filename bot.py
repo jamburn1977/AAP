@@ -54,7 +54,7 @@ async def award(
 ):
         # Check if the author has ANY of the allowed role IDs
         if not any(role.id in ALLOWED_ROLE_IDS for role in ctx.author.roles):
-                await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
+                await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=False)
                 return
         
         await ctx.defer(ephemeral=True)
@@ -79,7 +79,7 @@ async def award(
                 try:
                         result = response.json()
                 except Exception:
-                        await ctx.followup.send(f"🚨 Web server returned non-JSON (HTTP {response.status_code}):\n```text\n{response.text[:300]}\n```", ephemeral=True)
+                        await ctx.followup.send(f"🚨 Web server returned non-JSON (HTTP {response.status_code}):\n```text\n{response.text[:300]}\n```", ephemeral=False)
                         return
                 
                 if response.status_code == 200 and result.get("status") == "success":
@@ -103,9 +103,9 @@ async def award(
                 else:
                         error_msg = result.get("message", "Unknown error")
                         # Errors stay private (ephemeral)
-                        await ctx.followup.send(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
+                        await ctx.followup.send(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=False)
                         
         except Exception as e:
-                await ctx.followup.send(f"🚨 Connection error occurred: {str(e)}", ephemeral=True)
+                await ctx.followup.send(f"🚨 Connection error occurred: {str(e)}", ephemeral=False)
 
 bot.run(os.getenv("DISCORD_BOT_TOKEN"))
