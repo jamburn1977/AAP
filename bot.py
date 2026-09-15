@@ -3,9 +3,9 @@ import discord
 from discord.ext import commands
 import requests
 
-# Initialize Bot with appropriate intents
+# Initialize Bot with appropriate intents (Members intent required for role assignment)
 intents = discord.Intents.default()
-intents.members = True  # Required to check member roles
+intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # Configuration loaded securely from environment variables
@@ -13,12 +13,28 @@ WEBHOOK_URL = os.getenv("WEBHOOK_URL", "https://yourdomain.com/webhook.php")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "YOUR_SECURE_WEBHOOK_SECRET_KEY")
 ALLOWED_ROLE_ID = int(os.getenv("ALLOWED_ROLE_ID", "123456789012345678"))
 
+async def get_award_choices(ctx: discord.AutocompleteContext):
+        # Dynamically fetches the current list of awards from your PHP backend
+        try:
+                response = requests.get(
+                        f"{WEBHOOK_URL}?action=get_awards", 
+                        headers={"Authorization": WEBHOOK_SECRET}, 
+                        timeout=5
+                )
+                if response.status_code == 200:
+                        data = response.json()
+                        return data.get("awards", ["MVP", "Veteran"])
+        except Exception:
+                pass
+        return ["MVP", "Veteran"]
+
 @bot.event
 async def on_ready():
         print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
-        print("Bot is ready to dispatch awards to your web server.")
+        print("Bot is ready and synced with your web database.")
 
-@bot.slash_command(name="award", description="Give an award to a member and sync it to the website database.")
+@bot.slash_command(name="award", description="Give an award to a member, assign their role, and log it to the database.")
+@discord.option("award_name", description="Select an award from your database", autocomplete=get_award_choices)
 async def award(
         ctx: discord.ApplicationContext, 
         member: discord.Member, 
@@ -30,7 +46,7 @@ async def award(
                 await ctx.respond("❌ You do not have the required role to issue awards.", ephemeral=True)
                 return
         
-        # 2. Immediately defer as ephemeral so all followups match safely
+        # 2. Immediately defer as ephemeral to prevent Discord 3-second timeouts
         await ctx.defer(ephemeral=True)
         
         # 3. Prepare payload data
@@ -59,7 +75,23 @@ async def award(
                         return
                 
                 if response.status_code == 200 and result.get("status") == "success":
-                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention} and saved it to the database!", ephemeral=True)
+                        role_id_str = result.get("role_id")
+                        role_assigned_text = ""
+                        
+                        # 5. Automatically assign the Discord role if a valid role_id was returned
+                        if role_id_str and role_id_str.isdigit():
+                                role_id = int(role_id_str)
+                                role = ctx.guild.get_role(role_id)
+                                if role:
+                                        try:
+                                                await member.add_roles(role, reason=f"Awarded {award_name} by {ctx.author.display_name}")
+                                                role_assigned_text = f" and assigned the **{role.name}** role"
+                                        except Exception as role_err:
+                                                role_assigned_text = f" (⚠️ Failed to assign Discord role: {role_err})"
+                                else:
+                                        role_assigned_text = " (⚠️ Role ID found in DB, but role not found in this Discord server)"
+                        
+                        await ctx.followup.send(f"🏆 Successfully awarded **{award_name}** to {member.mention}{role_assigned_text} and saved it to the database!", ephemeral=True)
                 else:
                         error_msg = result.get("message", "Unknown error")
                         await ctx.followup.send(f"⚠️ Failed to record award on the web server: {error_msg}", ephemeral=True)
